@@ -1,3 +1,5 @@
+from typing import List
+
 from algorithm.network_predecessor import NetworkPredecessor
 from algorithm.predecessor_utility import PredecessorUtility
 from algorithm.protocol.conformance_protocol import ConformanceProtocol
@@ -10,17 +12,28 @@ class PredecessorService:
     def __init__(self, network: Network[ConformanceProtocol]):
         self.network: Network[ConformanceProtocol] = network
 
+    def build_predecessor_event(self, case, node_id, timestamp):
+        return Event(
+            case_id=case,
+            activity=node_id,
+            timestamp=timestamp,
+            node="",
+            group_id=""
+        )
+
     def find_predecessor_event(self, case, own_id, last_timestamp):
         # Consider multiple predecessors
-        network_predecessor: NetworkPredecessor = PredecessorUtility().find_predecessor(self.network, case=case, own_id=own_id)
+        network_predecessor: NetworkPredecessor = PredecessorUtility().find_predecessor(self.network, case=case,
+                                                                                        own_id=own_id)
         if not network_predecessor or (last_timestamp and last_timestamp > network_predecessor.last_timestamp):
             return None
         else:
-            return Event(
-                case_id=case,
-                activity=network_predecessor.node_id,
-                timestamp=network_predecessor.last_timestamp,
-                node="",
-                group_id=""
-            )
+            return self.build_predecessor_event(case, network_predecessor.node_id, network_predecessor.last_timestamp)
 
+    def find_predecessor_events(self, case, own_id, last_timestamp):
+        network_predecessors: List[NetworkPredecessor] = PredecessorUtility().find_predecessors_before_timestamp(
+            self.network, case=case, own_id=own_id, timestamp=last_timestamp)
+        return [
+            self.build_predecessor_event(case, network_predecessor.node_id, network_predecessor.last_timestamp)
+            for network_predecessor in network_predecessors
+        ]

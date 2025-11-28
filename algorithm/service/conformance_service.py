@@ -60,6 +60,10 @@ class ConformanceService:
                 self.alignment_states.top(case),
                 eval_external=False
             )
+        print(f"paths to target node {target_node}")
+        for path in paths:
+            print(path)
+            print("***")
         if not paths:
             return 0
         return min([path.cost() for path in paths])
