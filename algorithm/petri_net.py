@@ -2,7 +2,11 @@ from collections import deque
 from copy import deepcopy
 from typing import List, Set
 
+import pm4py
+
 from algorithm.petri_net_utils import Marking, Transition, AlignPath
+from process_mining_core.converter.pm4py_converter import Pm4PyConverter
+
 
 class DistributedPetriNet:
 
@@ -51,6 +55,12 @@ class DistributedPetriNet:
                 silent_transitions.append(transition)
         return silent_transitions
 
+    def get_transitions_to_place(self, place):
+        result = []
+        for transition in self.transitions:
+            if place in transition.output_places:
+                result.append(transition)
+        return result
 
     def is_enabled(self, marking, transition):
         for input_place in transition.input_places:
@@ -58,10 +68,31 @@ class DistributedPetriNet:
                 return False
         return True
 
+    def is_enabled_reverse(self, marking, transition):
+        for output_place in transition.output_places:
+            if not marking.is_marked(output_place):
+                return False
+        return True
+
+    def get_transitions_after_place(self, places):
+        result = []
+        for transition in self.transitions:
+            for place in places:
+                if place in transition.input_places:
+                    result.append(transition)
+        return result
+
     def get_enabled_transitions(self, marking):
         enabled = []
         for transition in self.transitions:
             if self.is_enabled(marking, transition):
+                enabled.append(transition)
+        return enabled
+
+    def get_enabled_transitions_reverse(self, marking):
+        enabled = []
+        for transition in self.transitions:
+            if self.is_enabled_reverse(marking, transition):
                 enabled.append(transition)
         return enabled
 
@@ -78,6 +109,11 @@ class DistributedPetriNet:
     def fire(self, marking, transition):
         this_marking = deepcopy(marking)
         this_marking.move(transition.input_places, transition.output_places)
+        return this_marking
+
+    def fire_reverse(self, marking, transition):
+        this_marking = deepcopy(marking)
+        this_marking.move(transition.output_places, transition.input_places)
         return this_marking
 
     def fire_multiple(self, marking, transitions):
@@ -105,3 +141,4 @@ class DistributedPetriNet:
                         return new_path
                     queue.append((next_marking, new_path))
         return None
+
