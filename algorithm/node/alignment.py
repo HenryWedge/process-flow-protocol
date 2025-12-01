@@ -16,15 +16,15 @@ class Alignment:
         return self
 
     def log_move(self, activity):
-        self.log_path.append(">")
-        self.model_path.append(activity)
+        self.log_path.append(activity)
+        self.model_path.append(">")
         self.cost = self.cost + 1
         self.processed_events = self.processed_events + 1
         return self
 
     def model_move(self, activity):
-        self.log_path.append(activity)
-        self.model_path.append(">")
+        self.log_path.append(">")
+        self.model_path.append(activity)
         self.cost = self.cost + 1
         self.processed_events = self.processed_events + 1
         return self

@@ -2,62 +2,19 @@ import unittest
 
 import pm4py
 
-from algorithm.node.alignment_node import AlignmentNode
+from algorithm.node.test.distributed_event_log_builder import DistributedEventLogBuilder
 from algorithm.petri_net_converter import PetriNetConverter
 from algorithm.petri_net_utils import Transition
-from distributed_environment_builder.infrastructure.network import Network
 from process_mining_core.datastructure.core.event import Event
 
 
 class TestAlignmentNode(unittest.TestCase):
 
     def init_test_case(self):
-        network: Network = Network("base")
-        node1 = AlignmentNode("N1", network)
-        node2 = AlignmentNode("N2", network)
-        node3 = AlignmentNode("N3", network)
+        return DistributedEventLogBuilder()
 
-        node1.receive_event(event=Event(
-            timestamp=0,
-            activity="A",
-            case_id="c1",
-            node="N1",
-            group_id=""
-        ))
-
-        node2.receive_event(event=Event(
-            timestamp=0,
-            activity="B",
-            case_id="c1",
-            node="N2",
-            group_id=""
-        ))
-
-        node3.receive_event(event=Event(
-            timestamp=0,
-            activity="C",
-            case_id="c1",
-            node="N3",
-            group_id=""
-        ))
-
-        node1.receive_event(event=Event(
-            timestamp=0,
-            activity="D",
-            case_id="c1",
-            node="N1",
-            group_id=""
-        ))
-
-        node2.receive_event(event=Event(
-            timestamp=0,
-            activity="E",
-            case_id="c1",
-            node="N2",
-            group_id=""
-        ))
-
-        return node1, node2, node3
+    def init_test_case_central(self):
+        return DistributedEventLogBuilder()
 
     def test_collect_event_log_correctly(self):
         node1, node2, node3 = self.init_test_case()
@@ -93,17 +50,23 @@ class TestAlignmentNode(unittest.TestCase):
         self.assertEqual(0, node1.align_event(event).cost)
 
     def test_skip_start_event(self):
-        node1, node2, node3 = self.init_test_case()
-        event = Event(
-            timestamp=0,
-            activity="B",
-            case_id="c2",
-            node="N2",
-            group_id=""
-        )
-        node2.receive_event(event)
+        env = self.init_test_case()
+        node1, node2, node3 = env.three_nodes()
+        event = env.eventB("c2")
+        env.send(event, "N2")
         print(node2.align_event(event))
-        #self.assertEqual(1, node2.align_event(event).cost)
+        self.assertEqual(1, node2.align_event(event).cost)
+
+    def test_alignment_2_events_1(self):
+        env = self.init_test_case()
+        node1, node2, node3 = env.three_nodes()
+        env.send(env.eventA("c2"), "N1")
+        env.send(env.eventB2("c2"), "N2", False)
+        env.send(env.eventC("c2"), "N3")
+
+        alignment = node3.align_event(env.eventC("c2"))
+        self.assertEqual(2, alignment.cost)
+        print(alignment)
 
     def test_alignment_2_events(self):
         node1, node2, node3 = self.init_test_case()
@@ -121,10 +84,54 @@ class TestAlignmentNode(unittest.TestCase):
             node="N2",
             group_id=""
         )
+        event2b = Event(
+            timestamp=1,
+            activity="B2",
+            case_id="c2",
+            node="N2",
+            group_id=""
+        )
+        event3 = Event(
+            timestamp=1,
+            activity="C",
+            case_id="c2",
+            node="N3",
+            group_id=""
+        )
         node1.receive_event(event)
-        self.assertEqual(0, node1.align_event(event).cost)
-        node2.receive_event(event2)
-        self.assertEqual(0, node2.align_event(event2).cost)
+        node2.receive_event(event2b, False)
+        node3.receive_event(event3)
+        alignment = node3.align_event(event3)
+        print(alignment)
+
+    def test_alignment_central(self):
+        node1 = self.init_test_case_central()
+        event = Event(
+            timestamp=0,
+            activity="A",
+            case_id="c2",
+            node="N1",
+            group_id=""
+        )
+        event2b = Event(
+            timestamp=1,
+            activity="B2",
+            case_id="c2",
+            node="N1",
+            group_id=""
+        )
+        event3 = Event(
+            timestamp=1,
+            activity="C",
+            case_id="c2",
+            node="N1",
+            group_id=""
+        )
+        node1.receive_event(event, False)
+        node1.receive_event(event2b, False)
+        node1.receive_event(event3, False)
+        alignment = node1.align_event(event3)
+        print(alignment)
 
     def test_alignment_skip_start_event_2_nodes(self):
         node1, node2, node3 = self.init_test_case()

@@ -26,14 +26,15 @@ class AlignmentNode(NetworkNode):
         self.marking: Dict[str, Marking] = {}
         self.discovery_strategy: DiscoveryStrategy = HeuristicsMinerDiscoveryStrategy()
 
-    def receive_event(self, event: Event):
+    def receive_event(self, event: Event, learn=True):
         case_id = event.caseid
         if not case_id in self.global_event_log:
             self.global_event_log[case_id] = []
         if not case_id in self.local_event_log:
             self.local_event_log[case_id] = []
         self.local_event_log[case_id].append(HiddenEvent(event))
-        self.learn_model(event)
+        if learn:
+            self.learn_model(event)
 
     def _convert_event_log(self):
         result = []
@@ -49,8 +50,11 @@ class AlignmentNode(NetworkNode):
             event_log = node.get_event_log_for_case(case_id)
             if len(event_log) > len(longest_event_log):
                 longest_event_log = event_log
-        longest_event_log.append(HiddenEvent(event))
-        self.global_event_log[case_id] = longest_event_log
+        if len(self.global_event_log[case_id]) > len(longest_event_log):
+            self.global_event_log[case_id].append(HiddenEvent(event))
+        else:
+            longest_event_log.append(HiddenEvent(event))
+            self.global_event_log[case_id] = longest_event_log
         self.model, self.im, self.fm = self.discovery_strategy.discover(self._convert_event_log())
 
     def get_event_log_for_case(self, case: str) -> List[Event]:
@@ -62,9 +66,7 @@ class AlignmentNode(NetworkNode):
         event = HiddenEvent(event)
         case_id = event.caseid
         self.get_alignment_model(case_id)
-
-        alignment = Alignment()
-        return self.get_alignment_of_event(case_id, event.activity, alignment)
+        return self.get_alignment_of_trace(case_id, event.activity, Alignment())
 
     def get_alignment_model(self, case_id):
         if not case_id in self.alignment_model:
@@ -76,7 +78,12 @@ class AlignmentNode(NetworkNode):
             self.local_event_log[case_id] = []
         return self.local_event_log[case_id]
 
-    def get_alignment_of_event(self, case_id: str, target: str, alignment: Alignment):
+    def get_alignment_of_event(self, case_id: str, transitions: List[Transition]):
+        log = self.get_local_log(case_id)
+        alignment = self.calculate_alignment(transitions, log)
+        return deepcopy(alignment)
+
+    def get_alignment_of_trace(self, case_id: str, target: str, alignment: Alignment):
         model, im, fm = self.get_alignment_model(case_id)
         log = self.get_local_log(case_id)
 
@@ -85,20 +92,37 @@ class AlignmentNode(NetworkNode):
         start_transitions = petri_net.get_transitions_after_place(petri_net.initial_places)
         start_transition = [t for t in start_transitions if t.activity_label][0]
         path = self.bfs_shortest_path_between_activities_reverse(petri_net, target, start_transition.activity_label)
-
-        for transition in path:
+        path_in_sections = self.split_path_to_sections(path)
+        for section in path_in_sections:
+            section.reverse()
             external_node = None
-            if self.node_id in transition.activity_label:
-                alignment = alignment + self.calculate_alignment([transition], log)
+            if self.node_id in section[0].activity_label:
+                alignment = alignment + self.calculate_alignment(section, log)
             else:
                 for node_id in self.network.get_all_node_ids():
-                    if node_id in transition.activity_label:
+                    if node_id in section[0].activity_label:
                         external_node = node_id
                 if external_node:
                     alignment = alignment + self.network.get_node(external_node).get_alignment_of_event(
-                        case_id=case_id, target=deepcopy(transition.activity_label), alignment=Alignment()
+                        case_id=case_id, transitions=deepcopy(section)
                     )
         return alignment
+
+    def split_path_to_sections(self, path):
+        result = []
+        current_section = []
+        current_node_id = None
+        for transition in path:
+            for node_id in self.network.get_all_node_ids():
+                if node_id in transition.activity_label:
+                    current_node_id = node_id
+            if current_node_id != node_id:
+                if current_section:
+                    result.append(deepcopy(current_section))
+                    current_section = []
+            current_section.append(transition)
+        result.append(current_section)
+        return result
 
     def calculate_alignment(self, model_path: List[Transition], log_path: List[Event]) -> Alignment:
         if not model_path:
